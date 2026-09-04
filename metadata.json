@@ -1,0 +1,7 @@
+{
+  "name": "DIV AI",
+  "description": "AI animation studio by DIVSTUDIO to create animated videos from text, scripts, images, characters, and scenes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
