@@ -25,7 +25,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope,
         application.applicationContext
     )
-    val aiProviderRepo = AiProviderRepository()
+    val aiProviderRepo = AiProviderRepository(application.applicationContext)
 
     private val _currentDestination = MutableStateFlow(NavDestination.LANDING)
     val currentDestination = _currentDestination.asStateFlow()
@@ -106,6 +106,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateProfile(name: String, style: String, ratio: String, voice: String) {
         viewModelScope.launch { authRepo.updateProfile(name, style, ratio, voice) }
+    }
+
+    fun saveGeminiApiKey(apiKey: String) {
+        aiProviderRepo.saveApiKey(apiKey)
+    }
+
+    fun clearGeminiApiKey() {
+        aiProviderRepo.clearApiKey()
     }
 
     fun startAnimationGeneration(
