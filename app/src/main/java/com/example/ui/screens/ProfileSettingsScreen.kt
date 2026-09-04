@@ -19,9 +19,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.entities.UserEntity
-import com.example.data.model.AnimationStyle
-import com.example.data.model.AspectRatioOption
-import com.example.data.model.VoicePresets
 import com.example.data.repository.ProviderStatus
 import com.example.ui.components.GlassCard
 import com.example.ui.navigation.NavDestination
@@ -34,6 +31,8 @@ fun ProfileSettingsScreen(
     providerStatuses: List<ProviderStatus>,
     isAiConfigured: Boolean,
     onSaveProfile: (fullName: String, defaultStyle: String, defaultRatio: String, defaultVoice: String) -> Unit,
+    onSaveGeminiApiKey: (String) -> Unit,
+    onClearGeminiApiKey: () -> Unit,
     onLogout: () -> Unit,
     onNavigate: (NavDestination) -> Unit
 ) {
@@ -41,6 +40,8 @@ fun ProfileSettingsScreen(
     var selectedStyle by remember { mutableStateOf(currentUser?.defaultStyle ?: "African Animation") }
     var selectedRatio by remember { mutableStateOf(currentUser?.defaultRatio ?: "16:9") }
     var selectedVoice by remember { mutableStateOf(currentUser?.defaultVoice ?: "Amaka") }
+    var geminiApiKey by remember { mutableStateOf("") }
+    var showKey by remember { mutableStateOf(false) }
     var showSavedMessage by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -50,7 +51,6 @@ fun ProfileSettingsScreen(
             .testTag("profile_settings_screen"),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp)
     ) {
-        // User Profile Header
         item {
             GlassCard(modifier = Modifier.fillMaxWidth(), backgroundColor = DarkSurfaceVariant) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -70,17 +70,8 @@ fun ProfileSettingsScreen(
                     }
                     Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = currentUser?.fullName ?: "Creator",
-                            color = TextPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
-                        Text(
-                            text = currentUser?.email ?: "",
-                            color = TextSecondary,
-                            fontSize = 12.sp
-                        )
+                        Text(currentUser?.fullName ?: "Creator", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text(currentUser?.email ?: "", color = TextSecondary, fontSize = 12.sp)
                         Surface(
                             color = NeonCyan.copy(alpha = 0.15f),
                             shape = RoundedCornerShape(4.dp),
@@ -100,7 +91,6 @@ fun ProfileSettingsScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // Studio Defaults
         item {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Text("Studio Defaults & Preferences", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
@@ -120,7 +110,6 @@ fun ProfileSettingsScreen(
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
-
                 Text("Default Animation Style", color = TextSecondary, fontSize = 12.sp)
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -135,7 +124,6 @@ fun ProfileSettingsScreen(
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
-
                 Text("Default Aspect Ratio", color = TextSecondary, fontSize = 12.sp)
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -150,7 +138,6 @@ fun ProfileSettingsScreen(
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
-
                 Button(
                     onClick = {
                         onSaveProfile(fullName, selectedStyle, selectedRatio, selectedVoice)
@@ -171,20 +158,73 @@ fun ProfileSettingsScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // AI Provider Architecture & Status (Requirement 21)
         item {
-            Text(
-                text = "AI Generation Providers & Engine",
-                color = TextPrimary,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "Secure server-side & local provider abstraction layers",
-                color = TextMuted,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
-            )
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Text("Real AI Generation", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Connect Google Gemini and Veo for real AI script, image and video generation. Your key is stored only in this app's private storage and is never committed to GitHub.",
+                    color = TextSecondary,
+                    fontSize = 11.sp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = geminiApiKey,
+                    onValueChange = { geminiApiKey = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Gemini API Key", color = TextSecondary) },
+                    placeholder = { Text("Paste your Google AI Studio API key", color = TextMuted) },
+                    singleLine = true,
+                    visualTransformation = if (showKey) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showKey = !showKey }) {
+                            Icon(if (showKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, contentDescription = "Toggle key visibility", tint = TextSecondary)
+                        }
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = NeonIndigo,
+                        unfocusedBorderColor = DarkBorder,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        cursorColor = NeonCyan
+                    )
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            if (geminiApiKey.isNotBlank()) {
+                                onSaveGeminiApiKey(geminiApiKey.trim())
+                                geminiApiKey = ""
+                            }
+                        },
+                        enabled = geminiApiKey.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonIndigo),
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Connect AI") }
+                    OutlinedButton(
+                        onClick = {
+                            onClearGeminiApiKey()
+                            geminiApiKey = ""
+                        },
+                        enabled = isAiConfigured,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Clear Key") }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    if (isAiConfigured) "● Gemini/Veo connection configured" else "○ Gemini/Veo connection not configured",
+                    color = if (isAiConfigured) AccentEmerald else AccentAmber,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        item {
+            Text("AI Generation Providers & Engine", color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text("Secure provider abstraction with real Google generation support", color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
         }
 
         items(providerStatuses) { provider ->
@@ -192,9 +232,7 @@ fun ProfileSettingsScreen(
                 color = DarkSurface,
                 shape = RoundedCornerShape(10.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, if (provider.isConfigured) DarkBorder else AccentAmber.copy(alpha = 0.5f)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp)
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Row(
@@ -216,14 +254,12 @@ fun ProfileSettingsScreen(
                             )
                         }
                     }
-
                     Text("Status: ${provider.statusMessage}", color = if (provider.isConfigured) TextSecondary else AccentAmber, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
                     Text("Config location: ${provider.configGuideLocation}", color = TextMuted, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp))
                 }
             }
         }
 
-        // Logout
         item {
             Spacer(modifier = Modifier.height(16.dp))
             OutlinedButton(
