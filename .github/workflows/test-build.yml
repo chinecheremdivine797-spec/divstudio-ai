@@ -1,4 +1,4 @@
-name: DIVSTUDIO AI Test Build
+name: DIVSTUDIO AI Final Release APK
 
 on:
   push:
@@ -16,7 +16,7 @@ defaults:
     shell: bash
 
 jobs:
-  test-build:
+  release-apk:
     runs-on: ubuntu-latest
 
     steps:
@@ -37,16 +37,39 @@ jobs:
       - name: Verify Gradle
         run: gradle --version
 
+      - name: Generate temporary release signing key
+        run: |
+          keytool -genkeypair -v \
+            -keystore "$GITHUB_WORKSPACE/release.keystore" \
+            -storepass "divstudio-release" \
+            -keypass "divstudio-release" \
+            -alias upload \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=DIVSTUDIO AI, OU=DIVSTUDIO, O=DIVSTUDIO AI, L=Nigeria, ST=Lagos, C=NG"
+
       - name: Run unit tests
         run: gradle test --stacktrace
 
-      - name: Build debug APK
-        run: gradle assembleDebug --stacktrace
+      - name: Build final release APK
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/release.keystore
+          STORE_PASSWORD: divstudio-release
+          KEY_PASSWORD: divstudio-release
+        run: gradle assembleRelease --stacktrace
 
-      - name: Upload debug APK
+      - name: Verify release APK
+        run: |
+          set -e
+          ls -lh app/build/outputs/apk/release/*.apk
+          test -s app/build/outputs/apk/release/*.apk
+          echo "Final release APK verified."
+
+      - name: Upload final release APK
         uses: actions/upload-artifact@v4
         with:
-          name: divstudio-ai-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: divstudio-ai-final-release-apk
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
