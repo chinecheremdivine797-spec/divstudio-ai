@@ -39,7 +39,7 @@ import java.io.File
 fun ImageToVideoScreen(onBack: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val repository = remember { ImageToVideoRepository() }
+    val repository = remember(context) { ImageToVideoRepository(context) }
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     var imageFile by remember { mutableStateOf<File?>(null) }
     var prompt by remember { mutableStateOf("Animate this cartoon character naturally: walk forward, wave, smile, and gently move the camera closer. Keep the character's appearance consistent.") }
