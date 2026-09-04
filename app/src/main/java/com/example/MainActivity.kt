@@ -9,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.components.DivAiBottomBar
 import com.example.ui.components.DivAiTopBar
@@ -43,9 +42,10 @@ class MainActivity : ComponentActivity() {
                 val adminLogs by viewModel.adminLogs.collectAsStateWithLifecycle()
 
                 var showNotificationsDialog by remember { mutableStateOf(false) }
-
-                val providerStatuses = remember { viewModel.aiProviderRepo.getProviderStatuses() }
-                val isAiConfigured = remember { viewModel.aiProviderRepo.isGeminiConfigured() }
+                var isAiConfigured by remember { mutableStateOf(viewModel.aiProviderRepo.isGeminiConfigured()) }
+                val providerStatuses = remember(isAiConfigured) {
+                    viewModel.aiProviderRepo.getProviderStatuses()
+                }
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
@@ -152,6 +152,14 @@ class MainActivity : ComponentActivity() {
                                 providerStatuses = providerStatuses,
                                 isAiConfigured = isAiConfigured,
                                 onSaveProfile = { name, style, ratio, voice -> viewModel.updateProfile(name, style, ratio, voice) },
+                                onSaveGeminiApiKey = { key ->
+                                    viewModel.saveGeminiApiKey(key)
+                                    isAiConfigured = true
+                                },
+                                onClearGeminiApiKey = {
+                                    viewModel.clearGeminiApiKey()
+                                    isAiConfigured = false
+                                },
                                 onLogout = { viewModel.logout() },
                                 onNavigate = { viewModel.navigateTo(it) }
                             )
