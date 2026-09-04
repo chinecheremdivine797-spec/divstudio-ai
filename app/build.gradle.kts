@@ -93,6 +93,7 @@ dependencies {
   implementation(libs.firebase.ai)
   implementation(libs.firebase.appcheck.recaptcha)
   implementation(libs.firebase.appcheck.debug)
+  implementation("com.google.code.gson:gson:2.13.2")
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.logging.interceptor)
