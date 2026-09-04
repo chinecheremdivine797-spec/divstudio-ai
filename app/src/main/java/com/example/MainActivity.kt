@@ -74,121 +74,88 @@ class MainActivity : ComponentActivity() {
                             .background(DarkCanvas)
                     ) {
                         when (currentDestination) {
-                            NavDestination.LANDING -> {
-                                LandingScreen(
-                                    onNavigate = { viewModel.navigateTo(it) }
-                                )
-                            }
-                            NavDestination.AUTH -> {
-                                AuthScreen(
-                                    onLogin = { email, pass -> viewModel.login(email, pass) },
-                                    onRegister = { email, name, pass -> viewModel.register(email, name, pass) },
-                                    onQuickLogin = { uid -> viewModel.quickSwitchUser(uid) },
-                                    onAuthSuccess = { viewModel.navigateTo(NavDestination.DASHBOARD) }
-                                )
-                            }
-                            NavDestination.DASHBOARD -> {
-                                DashboardScreen(
-                                    currentUser = currentUser,
-                                    projects = projects,
-                                    activeJobs = activeJobs,
-                                    onNavigate = { viewModel.navigateTo(it) },
-                                    onSelectProject = { viewModel.selectProject(it) }
-                                )
-                            }
-                            NavDestination.CREATE -> {
-                                CreateAnimationScreen(
-                                    characters = characters,
-                                    sceneTemplates = sceneTemplates,
-                                    providerStatuses = providerStatuses,
-                                    isAiConfigured = isAiConfigured,
-                                    onGenerateAnimation = { name, prompt, mode, style, duration, ratio, camera, charMove, voice, lang, scenes ->
-                                        viewModel.startAnimationGeneration(
-                                            name, prompt, mode, style, duration, ratio, camera, charMove, voice, lang, scenes
-                                        )
-                                    },
-                                    onNavigate = { viewModel.navigateTo(it) }
-                                )
-                            }
-                            NavDestination.STORYBOARD -> {
-                                StoryboardScreen(
-                                    currentProject = activeProject,
-                                    scenes = activeScenes,
-                                    onAddScene = { viewModel.addScene(it) },
-                                    onUpdateScene = { viewModel.updateScene(it) },
-                                    onDeleteScene = { viewModel.deleteScene(it) },
-                                    onReorderScenes = { viewModel.reorderScenes(it) },
-                                    onNavigate = { viewModel.navigateTo(it) }
-                                )
-                            }
-                            NavDestination.EDITOR -> {
-                                VideoEditorScreen(
-                                    project = activeProject,
-                                    scenes = activeScenes,
-                                    onSaveProject = { viewModel.saveProject(it) }
-                                )
-                            }
-                            NavDestination.CHARACTERS -> {
-                                CharacterStudioScreen(
-                                    characters = characters,
-                                    onSaveCharacter = { viewModel.saveCharacter(it) },
-                                    onDuplicateCharacter = { viewModel.duplicateCharacter(it) },
-                                    onDeleteCharacter = { viewModel.deleteCharacter(it) },
-                                    onUseInProject = { char ->
-                                        viewModel.navigateTo(NavDestination.CREATE)
-                                    },
-                                    onNavigate = { viewModel.navigateTo(it) }
-                                )
-                            }
-                            NavDestination.SCENES -> {
-                                SceneStudioScreen(
-                                    customTemplates = sceneTemplates,
-                                    onSaveTemplate = { viewModel.saveSceneTemplate(it) },
-                                    onDeleteTemplate = { viewModel.deleteSceneTemplate(it) },
-                                    onUseEnvironment = { envName ->
-                                        viewModel.navigateTo(NavDestination.CREATE)
-                                    },
-                                    onNavigate = { viewModel.navigateTo(it) }
-                                )
-                            }
-                            NavDestination.PROJECTS -> {
-                                ProjectsScreen(
-                                    projects = projects,
-                                    onSelectProject = { viewModel.selectProject(it) },
-                                    onDuplicateProject = { viewModel.duplicateProject(it) },
-                                    onRenameProject = { proj, newName -> viewModel.renameProject(proj, newName) },
-                                    onDeleteProject = { viewModel.deleteProject(it) },
-                                    onNavigate = { viewModel.navigateTo(it) }
-                                )
-                            }
-                            NavDestination.ADMIN -> {
-                                AdminDashboardScreen(
-                                    currentUser = currentUser,
-                                    allUsers = allUsers,
-                                    totalProjectsCount = projects.size,
-                                    totalGenerationsCount = activeJobs.size + projects.size,
-                                    completedProjectsCount = projects.count { it.status == "completed" },
-                                    providerStatuses = providerStatuses,
-                                    adminLogs = adminLogs,
-                                    onUpdateUserCredits = { uid, credits -> viewModel.adjustUserCredits(uid, credits) },
-                                    onNavigate = { viewModel.navigateTo(it) }
-                                )
-                            }
-                            NavDestination.PROFILE -> {
-                                ProfileSettingsScreen(
-                                    currentUser = currentUser,
-                                    providerStatuses = providerStatuses,
-                                    isAiConfigured = isAiConfigured,
-                                    onSaveProfile = { name, style, ratio, voice ->
-                                        viewModel.updateProfile(name, style, ratio, voice)
-                                    },
-                                    onLogout = { viewModel.logout() },
-                                    onNavigate = { viewModel.navigateTo(it) }
-                                )
-                            }
-                            NavDestination.HELP -> {
-                                HelpCenterScreen()
-                            }
+                            NavDestination.LANDING -> LandingScreen(onNavigate = { viewModel.navigateTo(it) })
+                            NavDestination.AUTH -> AuthScreen(
+                                onLogin = { email, pass -> viewModel.login(email, pass) },
+                                onRegister = { email, name, pass -> viewModel.register(email, name, pass) },
+                                onQuickLogin = { uid -> viewModel.quickSwitchUser(uid) },
+                                onAuthSuccess = { viewModel.navigateTo(NavDestination.DASHBOARD) }
+                            )
+                            NavDestination.DASHBOARD -> DashboardScreen(
+                                currentUser = currentUser,
+                                projects = projects,
+                                activeJobs = activeJobs,
+                                onNavigate = { viewModel.navigateTo(it) },
+                                onSelectProject = { viewModel.selectProject(it) }
+                            )
+                            NavDestination.CREATE -> CreateAnimationScreen(
+                                characters = characters,
+                                sceneTemplates = sceneTemplates,
+                                providerStatuses = providerStatuses,
+                                isAiConfigured = isAiConfigured,
+                                onGenerateAnimation = { name, prompt, mode, style, duration, ratio, camera, charMove, voice, lang, scenes ->
+                                    viewModel.startAnimationGeneration(
+                                        name, prompt, mode, style, duration, ratio, camera, charMove, voice, lang, scenes
+                                    )
+                                },
+                                onNavigate = { viewModel.navigateTo(it) }
+                            )
+                            NavDestination.STORYBOARD -> StoryboardScreen(
+                                currentProject = activeProject,
+                                scenes = activeScenes,
+                                onAddScene = { viewModel.addScene(it) },
+                                onUpdateScene = { viewModel.updateScene(it) },
+                                onDeleteScene = { viewModel.deleteScene(it) },
+                                onReorderScenes = { viewModel.reorderScenes(it) },
+                                onNavigate = { viewModel.navigateTo(it) }
+                            )
+                            NavDestination.EDITOR -> RealVideoPreviewScreen(
+                                project = activeProject,
+                                onSaveProject = { viewModel.saveProject(it) }
+                            )
+                            NavDestination.CHARACTERS -> CharacterStudioScreen(
+                                characters = characters,
+                                onSaveCharacter = { viewModel.saveCharacter(it) },
+                                onDuplicateCharacter = { viewModel.duplicateCharacter(it) },
+                                onDeleteCharacter = { viewModel.deleteCharacter(it) },
+                                onUseInProject = { viewModel.navigateTo(NavDestination.CREATE) },
+                                onNavigate = { viewModel.navigateTo(it) }
+                            )
+                            NavDestination.SCENES -> SceneStudioScreen(
+                                customTemplates = sceneTemplates,
+                                onSaveTemplate = { viewModel.saveSceneTemplate(it) },
+                                onDeleteTemplate = { viewModel.deleteSceneTemplate(it) },
+                                onUseEnvironment = { viewModel.navigateTo(NavDestination.CREATE) },
+                                onNavigate = { viewModel.navigateTo(it) }
+                            )
+                            NavDestination.PROJECTS -> ProjectsScreen(
+                                projects = projects,
+                                onSelectProject = { viewModel.selectProject(it) },
+                                onDuplicateProject = { viewModel.duplicateProject(it) },
+                                onRenameProject = { proj, newName -> viewModel.renameProject(proj, newName) },
+                                onDeleteProject = { viewModel.deleteProject(it) },
+                                onNavigate = { viewModel.navigateTo(it) }
+                            )
+                            NavDestination.ADMIN -> AdminDashboardScreen(
+                                currentUser = currentUser,
+                                allUsers = allUsers,
+                                totalProjectsCount = projects.size,
+                                totalGenerationsCount = activeJobs.size + projects.size,
+                                completedProjectsCount = projects.count { it.status == "completed" },
+                                providerStatuses = providerStatuses,
+                                adminLogs = adminLogs,
+                                onUpdateUserCredits = { uid, credits -> viewModel.adjustUserCredits(uid, credits) },
+                                onNavigate = { viewModel.navigateTo(it) }
+                            )
+                            NavDestination.PROFILE -> ProfileSettingsScreen(
+                                currentUser = currentUser,
+                                providerStatuses = providerStatuses,
+                                isAiConfigured = isAiConfigured,
+                                onSaveProfile = { name, style, ratio, voice -> viewModel.updateProfile(name, style, ratio, voice) },
+                                onLogout = { viewModel.logout() },
+                                onNavigate = { viewModel.navigateTo(it) }
+                            )
+                            NavDestination.HELP -> HelpCenterScreen()
                         }
 
                         if (showNotificationsDialog) {
