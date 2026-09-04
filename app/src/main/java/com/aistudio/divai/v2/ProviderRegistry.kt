@@ -6,6 +6,6 @@ class ProviderRegistry(providers: List<AiProvider>) {
 
     fun all(): List<AiProvider> = providersById.values.toList()
     fun find(id: String): AiProvider? = providersById[id]
-    fun supporting(capability: Capability): List<AiProvider> =
+    fun supporting(capability: AiCapability): List<AiProvider> =
         all().filter { capability in it.capabilities }
 }
