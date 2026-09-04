@@ -1,6 +1,7 @@
 package com.aistudio.divai
 
 import android.util.Base64
+import com.example.BuildConfig
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
