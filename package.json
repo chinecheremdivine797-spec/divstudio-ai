@@ -1,0 +1,13 @@
+{
+  "name": "divstudio-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DIVSTUDIO AI - AI cartoon animation and video creation studio",
+  "scripts": {
+    "build": "echo DIVSTUDIO AI Android project - use Gradle for Android builds",
+    "test": "echo DIVSTUDIO AI tests are run by Gradle"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
