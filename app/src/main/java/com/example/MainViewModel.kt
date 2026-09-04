@@ -18,7 +18,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val authRepo = AuthRepository(db.userDao())
     val projectRepo = ProjectRepository(db.projectDao(), db.sceneDao())
     val studioRepo = StudioRepository(db.characterDao(), db.sceneTemplateDao())
-    val generationRepo = GenerationRepository(db.generationJobDao(), db.projectDao(), db.notificationDao(), viewModelScope)
+    val generationRepo = GenerationRepository(
+        db.generationJobDao(),
+        db.projectDao(),
+        db.notificationDao(),
+        viewModelScope,
+        application.applicationContext
+    )
     val aiProviderRepo = AiProviderRepository()
 
     private val _currentDestination = MutableStateFlow(NavDestination.LANDING)
@@ -68,7 +74,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun navigateTo(destination: NavDestination) {
-        // Protected route check
         if (destination == NavDestination.ADMIN && currentUser.value?.role != "admin") {
             _currentDestination.value = NavDestination.AUTH
             return
@@ -76,9 +81,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _currentDestination.value = destination
     }
 
-    fun selectProject(projectId: String) {
-        _activeProjectId.value = projectId
-    }
+    fun selectProject(projectId: String) { _activeProjectId.value = projectId }
 
     fun login(email: String, pass: String) {
         viewModelScope.launch {
@@ -94,9 +97,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun quickSwitchUser(userId: String) {
-        authRepo.switchUser(userId)
-    }
+    fun quickSwitchUser(userId: String) { authRepo.switchUser(userId) }
 
     fun logout() {
         authRepo.logout()
@@ -104,9 +105,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateProfile(name: String, style: String, ratio: String, voice: String) {
-        viewModelScope.launch {
-            authRepo.updateProfile(name, style, ratio, voice)
-        }
+        viewModelScope.launch { authRepo.updateProfile(name, style, ratio, voice) }
     }
 
     fun startAnimationGeneration(
@@ -131,11 +130,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             description = prompt,
             mode = mode,
             status = "queued",
-            progress = 5,
-            currentStep = "Queued in generation cluster",
+            progress = 1,
+            currentStep = "Queued for real AI video generation",
             durationSeconds = duration,
             aspectRatio = ratio,
-            resolution = "1080p",
+            resolution = "720p",
             style = style,
             cameraMovement = camera,
             characterMovement = charMove,
@@ -154,21 +153,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun addScene(scene: SceneEntity) {
-        viewModelScope.launch { projectRepo.addScene(scene) }
-    }
-
-    fun updateScene(scene: SceneEntity) {
-        viewModelScope.launch { projectRepo.updateScene(scene) }
-    }
-
-    fun deleteScene(scene: SceneEntity) {
-        viewModelScope.launch { projectRepo.deleteScene(scene) }
-    }
-
-    fun reorderScenes(scenes: List<SceneEntity>) {
-        viewModelScope.launch { projectRepo.reorderScenes(_activeProjectId.value, scenes) }
-    }
+    fun addScene(scene: SceneEntity) { viewModelScope.launch { projectRepo.addScene(scene) } }
+    fun updateScene(scene: SceneEntity) { viewModelScope.launch { projectRepo.updateScene(scene) } }
+    fun deleteScene(scene: SceneEntity) { viewModelScope.launch { projectRepo.deleteScene(scene) } }
+    fun reorderScenes(scenes: List<SceneEntity>) { viewModelScope.launch { projectRepo.reorderScenes(_activeProjectId.value, scenes) } }
 
     fun duplicateProject(project: ProjectEntity) {
         viewModelScope.launch {
@@ -178,22 +166,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun renameProject(project: ProjectEntity, newName: String) {
-        viewModelScope.launch {
-            projectRepo.updateProject(project.copy(name = newName))
-        }
+        viewModelScope.launch { projectRepo.updateProject(project.copy(name = newName)) }
     }
 
-    fun deleteProject(projectId: String) {
-        viewModelScope.launch {
-            projectRepo.deleteProject(projectId)
-        }
-    }
-
-    fun saveProject(project: ProjectEntity) {
-        viewModelScope.launch {
-            projectRepo.updateProject(project)
-        }
-    }
+    fun deleteProject(projectId: String) { viewModelScope.launch { projectRepo.deleteProject(projectId) } }
+    fun saveProject(project: ProjectEntity) { viewModelScope.launch { projectRepo.updateProject(project) } }
 
     fun saveCharacter(character: CharacterEntity) {
         viewModelScope.launch {
@@ -202,13 +179,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun duplicateCharacter(character: CharacterEntity) {
-        viewModelScope.launch { studioRepo.duplicateCharacter(character) }
-    }
-
-    fun deleteCharacter(characterId: String) {
-        viewModelScope.launch { studioRepo.deleteCharacter(characterId) }
-    }
+    fun duplicateCharacter(character: CharacterEntity) { viewModelScope.launch { studioRepo.duplicateCharacter(character) } }
+    fun deleteCharacter(characterId: String) { viewModelScope.launch { studioRepo.deleteCharacter(characterId) } }
 
     fun saveSceneTemplate(template: SceneTemplateEntity) {
         viewModelScope.launch {
@@ -217,23 +189,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun deleteSceneTemplate(template: SceneTemplateEntity) {
-        viewModelScope.launch { studioRepo.deleteTemplate(template) }
-    }
+    fun deleteSceneTemplate(template: SceneTemplateEntity) { viewModelScope.launch { studioRepo.deleteTemplate(template) } }
 
     fun adjustUserCredits(userId: String, credits: Int) {
         viewModelScope.launch {
             val user = db.userDao().getUserByEmail(userId)
-            if (user != null) {
-                db.userDao().updateUser(user.copy(creditsRemaining = credits))
-            }
+            if (user != null) db.userDao().updateUser(user.copy(creditsRemaining = credits))
         }
     }
 
     fun markNotificationsRead() {
         val uid = authRepo.currentUserId.value ?: return
-        viewModelScope.launch {
-            db.notificationDao().markAllAsRead(uid)
-        }
+        viewModelScope.launch { db.notificationDao().markAllAsRead(uid) }
     }
 }
