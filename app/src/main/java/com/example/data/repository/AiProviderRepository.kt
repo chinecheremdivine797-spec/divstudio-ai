@@ -1,5 +1,6 @@
 package com.example.data.repository
 
+import android.content.Context
 import com.example.BuildConfig
 import com.example.data.local.entities.SceneEntity
 import kotlinx.coroutines.Dispatchers
@@ -22,7 +23,9 @@ data class ProviderStatus(
     val configGuideLocation: String
 )
 
-class AiProviderRepository {
+class AiProviderRepository(private val context: Context) {
+
+    private val prefs = context.getSharedPreferences("divstudio_ai_settings", Context.MODE_PRIVATE)
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -30,11 +33,29 @@ class AiProviderRepository {
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    fun getApiKey(): String = try {
-        val key = BuildConfig.GEMINI_API_KEY
-        if (key.isBlank() || key == "MY_GEMINI_API_KEY") "" else key
-    } catch (_: Exception) {
-        ""
+    /**
+     * Reads a user-configured key first, then the build-time secret injected by
+     * the Secrets Gradle plugin. The actual secret value is never committed to Git.
+     */
+    fun getApiKey(): String {
+        val saved = prefs.getString("gemini_api_key", "").orEmpty().trim()
+        if (saved.isNotBlank()) return saved
+
+        return try {
+            BuildConfig.GEMINI_API_KEY
+                .takeUnless { it.isBlank() || it == "MY_GEMINI_API_KEY" }
+                ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    fun saveApiKey(apiKey: String) {
+        prefs.edit().putString("gemini_api_key", apiKey.trim()).apply()
+    }
+
+    fun clearApiKey() {
+        prefs.edit().remove("gemini_api_key").apply()
     }
 
     fun isGeminiConfigured(): Boolean = getApiKey().isNotBlank()
@@ -48,7 +69,7 @@ class AiProviderRepository {
                 serviceType = "Text & Storyboard Generation",
                 isConfigured = configured,
                 statusMessage = if (configured) "Connected" else "Gemini API key not configured",
-                configGuideLocation = "Set GEMINI_API_KEY in AI Studio Secrets or App Settings"
+                configGuideLocation = "Settings → Gemini API Key or build secret"
             ),
             ProviderStatus(
                 id = "veo_video",
@@ -56,7 +77,7 @@ class AiProviderRepository {
                 serviceType = "Real Generative Video",
                 isConfigured = configured,
                 statusMessage = if (configured) "Ready for real MP4 generation" else "Gemini API key not configured",
-                configGuideLocation = "Set GEMINI_API_KEY in AI Studio Secrets or App Settings"
+                configGuideLocation = "Settings → Gemini API Key or build secret"
             ),
             ProviderStatus(
                 id = "div_tts_lipsync",
@@ -89,7 +110,7 @@ class AiProviderRepository {
                 }
 
                 val request = Request.Builder()
-                    .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$apiKey")
+                    .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey")
                     .post(requestJson.toString().toRequestBody("application/json".toMediaType()))
                     .build()
 
