@@ -24,7 +24,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val currentDestination = _currentDestination.asStateFlow()
     private val _activeProjectId = MutableStateFlow("proj_demo_01")
     val activeProjectId = _activeProjectId.asStateFlow()
-
     val currentUser: StateFlow<UserEntity?> = authRepo.getCurrentUserFlow().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val allUsers: StateFlow<List<UserEntity>> = authRepo.getAllUsersFlow().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val projects: StateFlow<List<ProjectEntity>> = authRepo.currentUserId.flatMapLatest { uid -> if (uid != null) projectRepo.getProjectsForUser(uid) else flowOf(emptyList()) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -46,11 +45,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateProfile(name: String, style: String, ratio: String, voice: String) { viewModelScope.launch { authRepo.updateProfile(name, style, ratio, voice) } }
     fun saveGeminiApiKey(apiKey: String) { aiProviderRepo.saveApiKey(apiKey) }
     fun clearGeminiApiKey() { aiProviderRepo.clearApiKey() }
-    fun saveSeedanceApiKey(apiKey: String) { settings.edit().putString("seedance_api_key", apiKey).apply() }
+    fun saveSeedanceApiKey(apiKey: String) { settings.edit().putString("seedance_api_key", apiKey.trim()).apply() }
     fun clearSeedanceApiKey() { settings.edit().remove("seedance_api_key").apply() }
     fun isSeedanceConfigured(): Boolean = settings.getString("seedance_api_key", "").orEmpty().isNotBlank()
+    fun saveGrokApiKey(apiKey: String) { settings.edit().putString("grok_api_key", apiKey.trim()).apply() }
+    fun clearGrokApiKey() { settings.edit().remove("grok_api_key").apply() }
+    fun isGrokConfigured(): Boolean = settings.getString("grok_api_key", "").orEmpty().isNotBlank()
     fun getVideoProvider(): String = settings.getString("video_provider", "veo").orEmpty().ifBlank { "veo" }
-    fun saveVideoProvider(provider: String) { settings.edit().putString("video_provider", if (provider == "seedance") "seedance" else "veo").apply() }
+    fun saveVideoProvider(provider: String) { settings.edit().putString("video_provider", if (provider in setOf("seedance", "grok")) provider else "veo").apply() }
 
     fun startAnimationGeneration(projectName: String, prompt: String, mode: String, style: String, duration: Int, ratio: String, camera: String, charMove: String, voice: String, language: String, scenes: List<SceneEntity>) {
         val uid = authRepo.currentUserId.value ?: "user_default_01"
