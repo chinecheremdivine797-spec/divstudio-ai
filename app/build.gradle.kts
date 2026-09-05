@@ -17,9 +17,9 @@ android {
     applicationId = "com.aistudio.divai.kqmv"
     minSdk = 24
     targetSdk = 36
-    versionCode = 6500
-    versionName = "65.00"
-
+    versionCode = 6501
+    versionName = "65.01"
+    buildConfigField("String", "DIVSTUDIO_BACKEND_URL", "\"${System.getenv("DIVSTUDIO_BACKEND_URL") ?: ""}\"")
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
@@ -52,15 +52,9 @@ android {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
   }
-  buildFeatures {
-    compose = true
-    buildConfig = true
-  }
+  buildFeatures { compose = true; buildConfig = true }
   testOptions { unitTests { isIncludeAndroidResources = true } }
-  dependenciesInfo {
-    includeInApk = false
-    includeInBundle = true
-  }
+  dependenciesInfo { includeInApk = false; includeInBundle = true }
 }
 
 secrets {
@@ -91,6 +85,7 @@ dependencies {
   implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
   implementation(libs.firebase.ai)
+  implementation(libs.firebase.auth)
   implementation(libs.firebase.appcheck.recaptcha)
   implementation(libs.firebase.appcheck.debug)
   implementation("com.google.code.gson:gson:2.13.2")
