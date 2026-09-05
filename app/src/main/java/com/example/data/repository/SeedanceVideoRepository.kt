@@ -15,12 +15,14 @@ import java.io.FileOutputStream
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-/** Real BytePlus/Volcano Engine Seedance 2.5 video generation client. */
+/** Real BytePlus LAS Seedance 2.5 video generation client. */
 class SeedanceVideoRepository(private val context: Context) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
         .writeTimeout(120, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
         .build()
 
     private val baseUrl = "https://operator.las.ap-southeast-1.bytepluses.com/api/v1/contents/generations/tasks"
@@ -42,7 +44,7 @@ class SeedanceVideoRepository(private val context: Context) {
         val key = apiKey()
         if (key.isBlank()) {
             return@withContext Result.failure(
-                IllegalStateException("Seedance 2.5 API key is not configured. Open Profile → Settings → Seedance 2.5 and connect your BytePlus/LAS API key.")
+                IllegalStateException("Seedance 2.5 API key is not configured. Open Profile → Settings → Seedance 2.5 and connect your LAS API key.")
             )
         }
 
@@ -80,14 +82,14 @@ class SeedanceVideoRepository(private val context: Context) {
                 val body = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
                     return@withContext Result.failure(
-                        IllegalStateException("Seedance 2.5 request failed (${response.code}): ${body.take(1000)}")
+                        IllegalStateException("Seedance 2.5 request failed (${response.code}): ${extractProviderError(body)}")
                     )
                 }
 
                 val taskId = JSONObject(body).optString("id")
                 if (taskId.isBlank()) {
                     return@withContext Result.failure(
-                        IllegalStateException("Seedance 2.5 did not return a task ID.")
+                        IllegalStateException("Seedance 2.5 did not return a task ID. Provider response: ${body.take(800)}")
                     )
                 }
 
@@ -96,7 +98,10 @@ class SeedanceVideoRepository(private val context: Context) {
                     context.filesDir,
                     "divstudio_seedance_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(8)}.mp4"
                 )
-                downloadVideo(key, videoUri, outputFile)
+
+                // The returned video_url is a pre-signed URL. Do NOT attach the LAS
+                // Authorization header to it; the URL itself carries its signature.
+                downloadVideo(videoUri, outputFile)
 
                 if (!outputFile.exists() || outputFile.length() == 0L) {
                     return@withContext Result.failure(
@@ -123,7 +128,7 @@ class SeedanceVideoRepository(private val context: Context) {
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    throw IllegalStateException("Seedance task check failed (${response.code}): ${body.take(1000)}")
+                    throw IllegalStateException("Seedance task check failed (${response.code}): ${extractProviderError(body)}")
                 }
 
                 val json = JSONObject(body)
@@ -134,9 +139,9 @@ class SeedanceVideoRepository(private val context: Context) {
                         return uri
                     }
                     "failed", "cancelled", "expired" -> {
-                        val error = json.optJSONObject("error")?.optString("message").orEmpty()
+                        val status = json.optString("status")
                         throw IllegalStateException(
-                            "Seedance 2.5 generation ${json.optString("status")}: ${error.ifBlank { "The provider rejected or expired the task." }}"
+                            "Seedance 2.5 generation $status: ${extractProviderError(json.toString())}"
                         )
                     }
                 }
@@ -148,22 +153,35 @@ class SeedanceVideoRepository(private val context: Context) {
         throw IllegalStateException("Seedance 2.5 generation timed out while waiting for the provider.")
     }
 
-    private fun downloadVideo(apiKey: String, uri: String, destination: File) {
+    private fun downloadVideo(uri: String, destination: File) {
         val request = Request.Builder()
             .url(uri)
-            .addHeader("Authorization", "Bearer $apiKey")
             .get()
             .build()
 
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 val body = response.body?.string().orEmpty()
-                throw IllegalStateException("Seedance video download failed (${response.code}): ${body.take(500)}")
+                throw IllegalStateException("Seedance video download failed (${response.code}): ${extractProviderError(body)}")
             }
             val body = response.body ?: throw IllegalStateException("Seedance returned an empty video response.")
             FileOutputStream(destination).use { output ->
                 body.byteStream().use { input -> input.copyTo(output) }
             }
+        }
+    }
+
+    private fun extractProviderError(body: String): String {
+        return try {
+            val json = JSONObject(body)
+            val error = json.optJSONObject("error")
+            val message = error?.optString("message").orEmpty()
+            if (message.isNotBlank()) return message
+            val code = error?.optString("code").orEmpty()
+            if (code.isNotBlank()) return code
+            json.optString("message").ifBlank { body.take(1000) }
+        } catch (_: Exception) {
+            body.take(1000)
         }
     }
 }
