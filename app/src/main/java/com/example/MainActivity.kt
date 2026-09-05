@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity() {
                 var isAiConfigured by remember { mutableStateOf(viewModel.aiProviderRepo.isGeminiConfigured()) }
                 var isSeedanceConfigured by remember { mutableStateOf(viewModel.isSeedanceConfigured()) }
                 var selectedVideoProvider by remember { mutableStateOf(viewModel.getVideoProvider()) }
-                val providerStatuses = remember(isAiConfigured) { viewModel.aiProviderRepo.getProviderStatuses() }
+                val providerStatuses = remember(isAiConfigured, isSeedanceConfigured, selectedVideoProvider) { viewModel.aiProviderRepo.getProviderStatuses() }
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(), containerColor = DarkCanvas,
