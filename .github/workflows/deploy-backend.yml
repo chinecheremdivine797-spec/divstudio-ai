@@ -2,6 +2,11 @@ name: Deploy DIVSTUDIO AI FFmpeg Backend
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
 
 permissions:
   contents: read
@@ -31,12 +36,14 @@ jobs:
             --source backend \
             --region "${{ secrets.GCP_REGION }}" \
             --platform managed \
-            --no-allow-unauthenticated \
+            --allow-unauthenticated \
             --set-env-vars "FIREBASE_STORAGE_BUCKET=${{ secrets.FIREBASE_STORAGE_BUCKET }}" \
             --quiet
 
-      - name: Show backend URL
+      - name: Verify backend health
         run: |
-          gcloud run services describe divstudio-ai-editor \
+          URL=$(gcloud run services describe divstudio-ai-editor \
             --region "${{ secrets.GCP_REGION }}" \
-            --format='value(status.url)'
+            --format='value(status.url)')
+          echo "DIVSTUDIO_BACKEND_URL=$URL"
+          curl --fail --silent --show-error "$URL/health"
