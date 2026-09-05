@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.divai.kqmv"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0.0"
+    versionCode = 6500
+    versionName = "65.00"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
