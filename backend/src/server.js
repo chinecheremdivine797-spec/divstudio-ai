@@ -47,6 +47,16 @@ function runFfmpeg(args) {
   });
 }
 
+function atempoChain(speed) {
+  // FFmpeg's atempo filter accepts factors from 0.5 to 2.0 per instance.
+  const filters = [];
+  let value = speed;
+  while (value < 0.5) { filters.push('atempo=0.5'); value /= 0.5; }
+  while (value > 2) { filters.push('atempo=2'); value /= 2; }
+  if (Math.abs(value - 1) > 0.0001) filters.push(`atempo=${value}`);
+  return filters;
+}
+
 async function cleanup(files) {
   await Promise.all(files.map(f => fs.rm(f, { force: true }).catch(() => {})));
 }
@@ -61,7 +71,7 @@ async function publish(filePath, userId, operation) {
   return { objectName, url, id };
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, service: 'DIVSTUDIO AI editing backend', version: '1.0.0' }));
+app.get('/health', (_req, res) => res.json({ ok: true, service: 'DIVSTUDIO AI editing backend', version: '1.1.0' }));
 
 app.post('/v1/edit/transform', requireAuth, upload.single('video'), async (req, res) => {
   const input = req.file?.path;
@@ -71,6 +81,7 @@ app.post('/v1/edit/transform', requireAuth, upload.single('video'), async (req, 
   try {
     const start = Math.max(0, Number(req.body.start ?? 0));
     const end = Number(req.body.end ?? 0);
+    const duration = end > start ? end - start : 0;
     const speed = Math.min(4, Math.max(0.25, Number(req.body.speed ?? 1)));
     const volume = Math.min(4, Math.max(0, Number(req.body.volume ?? 1)));
     const mute = String(req.body.mute ?? 'false') === 'true';
@@ -80,17 +91,18 @@ app.post('/v1/edit/transform', requireAuth, upload.single('video'), async (req, 
     if (req.body.rotate === '270') vf.push('transpose=2');
     if (req.body.flip === 'horizontal') vf.push('hflip');
     if (req.body.flip === 'vertical') vf.push('vflip');
-    const af = [];
-    if (speed !== 1) af.push(`atempo=${speed}`);
-    af.push(`volume=${mute ? 0 : volume}`);
+    const af = [...atempoChain(speed), `volume=${mute ? 0 : volume}`];
+
     const args = ['-y', '-i', input];
     if (start > 0) args.push('-ss', String(start));
-    if (end > start) args.push('-to', String(end));
+    // Use an explicit duration so the selected end point is relative to the trim start.
+    if (duration > 0) args.push('-t', String(duration));
     if (vf.length) args.push('-vf', vf.join(','));
     args.push('-af', af.join(','), '-map', '0:v:0', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-c:a', 'aac', '-movflags', '+faststart', output];
+
     await runFfmpeg(args);
     const published = await publish(output, req.user.uid, 'transform');
-    await db.collection('editJobs').doc(published.id).set({ uid: req.user.uid, operation: 'transform', status: 'completed', createdAt: admin.firestore.FieldValue.serverTimestamp(), outputPath: published.objectName });
+    await db.collection('editJobs').doc(published.id).set({ uid: req.user.uid, operation: 'transform', status: 'completed', createdAt: admin.firestore.FieldValue.serverTimestamp(), outputPath: published.objectName, start, end, duration, speed, volume, mute, rotate: req.body.rotate || null, flip: req.body.flip || null });
     res.json({ ok: true, ...published });
   } catch (e) {
     res.status(500).json({ error: e.message || 'Video transform failed.' });
