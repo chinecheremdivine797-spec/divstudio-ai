@@ -21,6 +21,7 @@ import com.example.data.local.entities.CharacterEntity
 import com.example.data.local.entities.SceneEntity
 import com.example.data.local.entities.SceneTemplateEntity
 import com.example.data.model.*
+import com.example.data.model.VoicePresets
 import com.example.data.repository.ProviderStatus
 import com.example.ui.components.GlassCard
 import com.example.ui.navigation.NavDestination
@@ -34,7 +35,7 @@ fun StudioCreateScreen(
     providerStatuses: List<ProviderStatus>,
     isAiConfigured: Boolean,
     onGenerateAnimation: (
-        String, String, String, String, Int, String, String, String, String, String, List<SceneEntity>
+        String, String, String, String, Int, String, String, String, String, List<SceneEntity>
     ) -> Unit,
     onNavigate: (NavDestination) -> Unit
 ) {
@@ -102,7 +103,7 @@ fun StudioCreateScreen(
                     }
                 }
                 Spacer(Modifier.weight(1f))
-                if (isAiConfigured || providerStatuses.any { it.configured }) {
+                if (isAiConfigured || providerStatuses.isNotEmpty()) {
                     Icon(Icons.Default.AutoAwesome, contentDescription = "AI ready", tint = NeonCyan, modifier = Modifier.size(18.dp))
                 }
             }
