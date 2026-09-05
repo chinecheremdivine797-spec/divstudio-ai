@@ -3,9 +3,9 @@ package com.example.data.repository
 import android.content.Context
 import android.net.Uri
 import com.example.BuildConfig
+import com.google.android.gms.tasks.Tasks
 import com.google.firebase.auth.FirebaseAuth
 import com.google.gson.Gson
-import kotlinx.coroutines.tasks.await
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
@@ -30,8 +30,8 @@ class VideoEditRepository(
         val baseUrl = BuildConfig.DIVSTUDIO_BACKEND_URL.trim().trimEnd('/')
         require(baseUrl.startsWith("https://")) { "FFmpeg backend URL is not configured. Configure DIVSTUDIO_BACKEND_URL with the deployed HTTPS backend URL." }
         val auth = FirebaseAuth.getInstance()
-        val user = auth.currentUser ?: auth.signInAnonymously().await().user
-        val token = user?.getIdToken(false)?.await()?.token ?: error("Firebase authentication is unavailable.")
+        val user = auth.currentUser ?: Tasks.await(auth.signInAnonymously()).user
+        val token = user?.let { Tasks.await(it.getIdToken(false)).token } ?: error("Firebase authentication is unavailable.")
         val input = copyUriToCache(source)
         try {
             val multipart = MultipartBody.Builder().setType(MultipartBody.FORM)
@@ -41,30 +41,44 @@ class VideoEditRepository(
                 .addFormDataPart("speed", speed.coerceIn(0.25f, 4f).toString())
                 .addFormDataPart("volume", volume.coerceIn(0f, 4f).toString())
                 .addFormDataPart("mute", mute.toString())
-                .apply { rotate?.let { addFormDataPart("rotate", it) }; flip?.let { addFormDataPart("flip", it) } }
+                .apply {
+                    rotate?.let { addFormDataPart("rotate", it) }
+                    flip?.let { addFormDataPart("flip", it) }
+                }
                 .build()
-            val request = Request.Builder().url("$baseUrl/v1/edit/transform").header("Authorization", "Bearer $token").post(multipart).build()
+            val request = Request.Builder()
+                .url("$baseUrl/v1/edit/transform")
+                .header("Authorization", "Bearer $token")
+                .post(multipart)
+                .build()
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
                 val parsed = runCatching { Gson().fromJson(body, BackendResponse::class.java) }.getOrNull()
-                if (!response.isSuccessful || parsed?.ok != true || parsed.url.isNullOrBlank()) throw IllegalStateException(parsed?.error ?: "FFmpeg export failed (HTTP ${response.code}).")
+                if (!response.isSuccessful || parsed?.ok != true || parsed.url.isNullOrBlank()) {
+                    throw IllegalStateException(parsed?.error ?: "FFmpeg export failed (HTTP ${response.code}).")
+                }
                 return Result(parsed.url!!, parsed.objectName.orEmpty(), parsed.id.orEmpty())
             }
-        } finally { input.delete() }
+        } finally {
+            input.delete()
+        }
     }
 
     suspend fun downloadResult(url: String, destinationName: String = "divstudio-export-${System.currentTimeMillis()}.mp4"): File {
         val output = File(context.cacheDir, destinationName)
         client.newCall(Request.Builder().url(url).get().build()).execute().use { response ->
             if (!response.isSuccessful) throw IllegalStateException("Could not download exported MP4 (HTTP ${response.code}).")
-            response.body?.byteStream()?.use { input -> output.outputStream().use { input.copyTo(it) } } ?: throw IllegalStateException("Export returned an empty file.")
+            response.body?.byteStream()?.use { input -> output.outputStream().use { input.copyTo(it) } }
+                ?: throw IllegalStateException("Export returned an empty file.")
         }
         return output
     }
 
     private fun copyUriToCache(uri: Uri): File {
         val file = File(context.cacheDir, "editor-input-${System.currentTimeMillis()}.mp4")
-        context.contentResolver.openInputStream(uri)?.use { input -> file.outputStream().use { input.copyTo(it) } } ?: throw IllegalStateException("Could not read the selected video.")
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            file.outputStream().use { input.copyTo(it) }
+        } ?: throw IllegalStateException("Could not read the selected video.")
         return file
     }
 }
