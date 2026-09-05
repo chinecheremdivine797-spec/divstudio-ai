@@ -1,0 +1,19 @@
+{
+  "name": "divstudio-ai-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "@google-cloud/storage": "^7.16.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "firebase-admin": "^13.4.0",
+    "ffmpeg-static": "^5.2.0",
+    "multer": "^2.0.2"
+  }
+}
