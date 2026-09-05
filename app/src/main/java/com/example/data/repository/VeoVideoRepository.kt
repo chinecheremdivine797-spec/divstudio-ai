@@ -16,181 +16,73 @@ import java.io.FileOutputStream
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-/**
- * Real Google Veo 3.1 video generation client.
- *
- * The API returns a long-running operation. This class starts the operation,
- * polls until completion, then downloads the generated MP4 into app storage.
- * No fake progress or placeholder video URL is returned.
- */
+/** Real Google Veo 3.1 Fast text-to-video client. */
 class VeoVideoRepository(private val context: Context) {
+    private val client = OkHttpClient.Builder().connectTimeout(30, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS).writeTimeout(120, TimeUnit.SECONDS).build()
+    private val baseUrl = "https://generativelanguage.googleapis.com/v1beta"
+    private val model = "veo-3.1-fast-generate-preview"
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS)
-        .writeTimeout(120, TimeUnit.SECONDS)
-        .build()
-
-    /**
-     * Prefer the Gemini key configured by the user inside DIVSTUDIO AI.
-     * Fall back to the build-time key only when one was supplied.
-     */
     private fun apiKey(): String {
-        val saved = context.getSharedPreferences("divstudio_ai_settings", Context.MODE_PRIVATE)
-            .getString("gemini_api_key", "")
-            .orEmpty()
-            .trim()
+        val saved = context.getSharedPreferences("divstudio_ai_settings", Context.MODE_PRIVATE).getString("gemini_api_key", "").orEmpty().trim()
         if (saved.isNotBlank()) return saved
-
-        return try {
-            BuildConfig.GEMINI_API_KEY
-                .takeUnless { it.isBlank() || it == "MY_GEMINI_API_KEY" }
-                ?.trim()
-                .orEmpty()
-        } catch (_: Throwable) {
-            ""
-        }
+        return try { BuildConfig.GEMINI_API_KEY.takeUnless { it.isBlank() || it == "MY_GEMINI_API_KEY" }?.trim().orEmpty() } catch (_: Throwable) { "" }
     }
 
-    suspend fun generateVideo(
-        prompt: String,
-        aspectRatio: String = "16:9",
-        resolution: String = "720p"
-    ): Result<File> = withContext(Dispatchers.IO) {
-        val key = apiKey()
-        if (key.isBlank()) {
-            return@withContext Result.failure(
-                IllegalStateException("Gemini API key is not configured. Open Profile → Settings → Real AI Generation and connect your Gemini API key.")
-            )
-        }
-
-        try {
-            val safeRatio = if (aspectRatio == "9:16") "9:16" else "16:9"
-            val safeResolution = when (resolution) {
-                "1080p" -> "1080p"
-                "4k" -> "4k"
-                else -> "720p"
-            }
-
-            val requestJson = JSONObject().apply {
-                put("instances", JSONArray().put(JSONObject().apply {
-                    put("prompt", prompt.take(10000))
-                }))
+    suspend fun generateVideo(prompt: String, aspectRatio: String = "16:9", resolution: String = "720p"): Result<File> = withContext(Dispatchers.IO) {
+        runCatching {
+            val key = apiKey()
+            require(key.isNotBlank()) { "Gemini API key is missing. Open Profile → Settings → Real AI Generation and connect your key." }
+            val payload = JSONObject().apply {
+                put("instances", JSONArray().put(JSONObject().apply { put("prompt", prompt.take(10000)) }))
                 put("parameters", JSONObject().apply {
-                    put("aspectRatio", safeRatio)
-                    put("resolution", safeResolution)
+                    put("aspectRatio", if (aspectRatio == "9:16") "9:16" else "16:9")
+                    put("resolution", if (resolution == "1080p") "1080p" else "720p")
                     put("numberOfVideos", 1)
                 })
             }
-
-            val request = Request.Builder()
-                .url("https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview:predictLongRunning")
-                .addHeader("x-goog-api-key", key)
-                .addHeader("Content-Type", "application/json")
-                .post(requestJson.toString().toRequestBody("application/json".toMediaType()))
-                .build()
-
-            client.newCall(request).execute().use { response ->
+            val request = Request.Builder().url("$baseUrl/models/$model:predictLongRunning").header("x-goog-api-key", key).header("Content-Type", "application/json").post(payload.toString().toRequestBody("application/json".toMediaType())).build()
+            val operationName = client.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
-                if (!response.isSuccessful) {
-                    return@withContext Result.failure(
-                        IllegalStateException("Veo request failed (${response.code}): ${body.take(800)}")
-                    )
-                }
-
-                val operationName = JSONObject(body).optString("name")
-                if (operationName.isBlank()) {
-                    return@withContext Result.failure(
-                        IllegalStateException("Veo did not return a generation operation.")
-                    )
-                }
-
-                val videoUri = pollForVideoUri(key, operationName)
-                val outputFile = File(
-                    context.filesDir,
-                    "divstudio_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(8)}.mp4"
-                )
-
-                downloadVideo(key, videoUri, outputFile)
-                if (!outputFile.exists() || outputFile.length() == 0L) {
-                    return@withContext Result.failure(
-                        IllegalStateException("Veo completed but the downloaded MP4 is empty.")
-                    )
-                }
-
-                Result.success(outputFile)
+                if (!response.isSuccessful) throw apiException(response.code, body)
+                JSONObject(body).optString("name").takeIf { it.isNotBlank() } ?: error("Google returned no generation operation.")
             }
-        } catch (e: Exception) {
-            Result.failure(
-                IllegalStateException(e.message ?: "Veo video generation failed.", e)
-            )
+            var videoUri: String? = null
+            repeat(60) {
+                if (videoUri == null) {
+                    delay(10_000)
+                    val poll = Request.Builder().url("$baseUrl/$operationName").header("x-goog-api-key", key).get().build()
+                    client.newCall(poll).execute().use { response ->
+                        val body = response.body?.string().orEmpty()
+                        if (!response.isSuccessful) throw apiException(response.code, body)
+                        val json = JSONObject(body)
+                        if (json.optBoolean("done", false)) {
+                            json.optJSONObject("error")?.let { error("Veo generation failed: ${it.optString("message", it.toString())}") }
+                            videoUri = json.optJSONObject("response")?.optJSONObject("generateVideoResponse")?.optJSONArray("generatedSamples")?.optJSONObject(0)?.optJSONObject("video")?.optString("uri")?.takeIf { it.isNotBlank() }
+                            if (videoUri == null) error("Veo finished without a video URI.")
+                        }
+                    }
+                }
+            }
+            val uri = videoUri ?: error("Veo generation timed out after 10 minutes.")
+            val output = File(context.filesDir, "divstudio_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(8)}.mp4")
+            client.newCall(Request.Builder().url(uri).header("x-goog-api-key", key).get().build()).execute().use { response ->
+                if (!response.isSuccessful) throw apiException(response.code, response.body?.string().orEmpty())
+                val body = response.body ?: error("Google returned an empty video response.")
+                FileOutputStream(output).use { out -> body.byteStream().use { it.copyTo(out) } }
+            }
+            require(output.exists() && output.length() > 0) { "Veo returned an empty MP4." }
+            output
         }
     }
 
-    private fun pollForVideoUri(apiKey: String, operationName: String): String {
-        val operationUrl = "https://generativelanguage.googleapis.com/v1beta/$operationName"
-
-        repeat(60) {
-            val request = Request.Builder()
-                .url(operationUrl)
-                .addHeader("x-goog-api-key", apiKey)
-                .get()
-                .build()
-
-            client.newCall(request).execute().use { response ->
-                val body = response.body?.string().orEmpty()
-                if (!response.isSuccessful) {
-                    throw IllegalStateException("Veo operation check failed (${response.code}): ${body.take(800)}")
-                }
-
-                val json = JSONObject(body)
-                if (json.optBoolean("done", false)) {
-                    if (json.has("error")) {
-                        throw IllegalStateException(
-                            "Veo generation failed: ${json.optJSONObject("error")?.optString("message") ?: "Unknown error"}"
-                        )
-                    }
-
-                    val uri = json.optJSONObject("response")
-                        ?.optJSONObject("generateVideoResponse")
-                        ?.optJSONArray("generatedSamples")
-                        ?.optJSONObject(0)
-                        ?.optJSONObject("video")
-                        ?.optString("uri")
-                        .orEmpty()
-
-                    if (uri.isBlank()) {
-                        throw IllegalStateException("Veo finished without a video URI.")
-                    }
-                    return uri
-                }
-            }
-
-            Thread.sleep(10_000)
+    private fun apiException(code: Int, body: String): IllegalStateException {
+        val lower = body.lowercase()
+        val message = when {
+            code == 401 || lower.contains("api key not valid") -> "Gemini API key is invalid or expired. Reconnect a valid key in the app."
+            code == 403 || lower.contains("billing") || lower.contains("paid") || lower.contains("permission") -> "Veo 3.1 is not available on the free Gemini API tier. Enable billing on the Google project linked to this key, then try again."
+            code == 429 -> "Gemini/Veo rate limit reached. Wait and try again."
+            else -> "Veo request failed ($code): ${body.take(800)}"
         }
-
-        throw IllegalStateException("Veo generation timed out while waiting for the operation to complete.")
-    }
-
-    private fun downloadVideo(apiKey: String, uri: String, destination: File) {
-        val request = Request.Builder()
-            .url(uri)
-            .addHeader("x-goog-api-key", apiKey)
-            .get()
-            .build()
-
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                val body = response.body?.string().orEmpty()
-                throw IllegalStateException("Video download failed (${response.code}): ${body.take(500)}")
-            }
-
-            val body = response.body ?: throw IllegalStateException("Veo returned an empty video response.")
-            FileOutputStream(destination).use { output ->
-                body.byteStream().use { input ->
-                    input.copyTo(output)
-                }
-            }
-        }
+        return IllegalStateException(message)
     }
 }
