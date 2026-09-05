@@ -31,12 +31,25 @@ class VeoVideoRepository(private val context: Context) {
         .writeTimeout(120, TimeUnit.SECONDS)
         .build()
 
-    private fun apiKey(): String = try {
-        BuildConfig.GEMINI_API_KEY
-            .takeUnless { it.isBlank() || it == "MY_GEMINI_API_KEY" }
-            ?: ""
-    } catch (_: Throwable) {
-        ""
+    /**
+     * Prefer the Gemini key configured by the user inside DIVSTUDIO AI.
+     * Fall back to the build-time key only when one was supplied.
+     */
+    private fun apiKey(): String {
+        val saved = context.getSharedPreferences("divstudio_ai_settings", Context.MODE_PRIVATE)
+            .getString("gemini_api_key", "")
+            .orEmpty()
+            .trim()
+        if (saved.isNotBlank()) return saved
+
+        return try {
+            BuildConfig.GEMINI_API_KEY
+                .takeUnless { it.isBlank() || it == "MY_GEMINI_API_KEY" }
+                ?.trim()
+                .orEmpty()
+        } catch (_: Throwable) {
+            ""
+        }
     }
 
     suspend fun generateVideo(
@@ -47,7 +60,7 @@ class VeoVideoRepository(private val context: Context) {
         val key = apiKey()
         if (key.isBlank()) {
             return@withContext Result.failure(
-                IllegalStateException("GEMINI_API_KEY is not configured. Add it to the app Secrets configuration before generating a video.")
+                IllegalStateException("Gemini API key is not configured. Open Profile → Settings → Real AI Generation and connect your Gemini API key.")
             )
         }
 
@@ -71,21 +84,20 @@ class VeoVideoRepository(private val context: Context) {
             }
 
             val request = Request.Builder()
-                .url("https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-fast-generate-preview:predictLongRunning")
+                .url("https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview:predictLongRunning")
                 .addHeader("x-goog-api-key", key)
                 .addHeader("Content-Type", "application/json")
                 .post(requestJson.toString().toRequestBody("application/json".toMediaType()))
                 .build()
 
             client.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    val error = response.body?.string().orEmpty()
                     return@withContext Result.failure(
-                        IllegalStateException("Veo request failed (${response.code}): ${error.take(500)}")
+                        IllegalStateException("Veo request failed (${response.code}): ${body.take(800)}")
                     )
                 }
 
-                val body = response.body?.string().orEmpty()
                 val operationName = JSONObject(body).optString("name")
                 if (operationName.isBlank()) {
                     return@withContext Result.failure(
@@ -109,7 +121,9 @@ class VeoVideoRepository(private val context: Context) {
                 Result.success(outputFile)
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(
+                IllegalStateException(e.message ?: "Veo video generation failed.", e)
+            )
         }
     }
 
@@ -126,13 +140,15 @@ class VeoVideoRepository(private val context: Context) {
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    throw IllegalStateException("Veo operation check failed (${response.code}): ${body.take(500)}")
+                    throw IllegalStateException("Veo operation check failed (${response.code}): ${body.take(800)}")
                 }
 
                 val json = JSONObject(body)
                 if (json.optBoolean("done", false)) {
                     if (json.has("error")) {
-                        throw IllegalStateException("Veo generation failed: ${json.optJSONObject("error")?.optString("message") ?: "Unknown error"}")
+                        throw IllegalStateException(
+                            "Veo generation failed: ${json.optJSONObject("error")?.optString("message") ?: "Unknown error"}"
+                        )
                     }
 
                     val uri = json.optJSONObject("response")
@@ -165,7 +181,8 @@ class VeoVideoRepository(private val context: Context) {
 
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                throw IllegalStateException("Video download failed (${response.code}).")
+                val body = response.body?.string().orEmpty()
+                throw IllegalStateException("Video download failed (${response.code}): ${body.take(500)}")
             }
 
             val body = response.body ?: throw IllegalStateException("Veo returned an empty video response.")
