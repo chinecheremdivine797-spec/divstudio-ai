@@ -9,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.components.DivAiBottomBar
 import com.example.ui.components.DivAiTopBar
@@ -55,6 +54,7 @@ class MainActivity : ComponentActivity() {
                             NavDestination.LANDING -> LandingScreen(onNavigate = { viewModel.navigateTo(it) })
                             NavDestination.AUTH -> AuthScreen(onLogin = { email, pass -> viewModel.login(email, pass) }, onRegister = { email, name, pass -> viewModel.register(email, name, pass) }, onQuickLogin = { uid -> viewModel.quickSwitchUser(uid) }, onAuthSuccess = { viewModel.navigateTo(NavDestination.DASHBOARD) })
                             NavDestination.DASHBOARD -> DashboardScreen(currentUser = currentUser, projects = projects, activeJobs = activeJobs, onNavigate = { viewModel.navigateTo(it) }, onSelectProject = { viewModel.selectProject(it) })
+                            NavDestination.GEMINI -> GeminiStudioScreen(onOpenEditor = { viewModel.navigateTo(NavDestination.EDITOR) }, onOpenCreate = { viewModel.navigateTo(NavDestination.CREATE) })
                             NavDestination.CREATE -> StudioCreateScreen(characters = characters, sceneTemplates = sceneTemplates, providerStatuses = providerStatuses, isAiConfigured = isAiConfigured, onGenerateAnimation = { name, prompt, mode, style, duration, ratio, camera, charMove, voice, lang, scenes -> viewModel.startAnimationGeneration(name, prompt, mode, style, duration, ratio, camera, charMove, voice, lang, scenes) }, onNavigate = { viewModel.navigateTo(it) })
                             NavDestination.STORYBOARD -> StoryboardScreen(currentProject = activeProject, scenes = activeScenes, onAddScene = { viewModel.addScene(it) }, onUpdateScene = { viewModel.updateScene(it) }, onDeleteScene = { viewModel.deleteScene(it) }, onReorderScenes = { viewModel.reorderScenes(it) }, onNavigate = { viewModel.navigateTo(it) })
                             NavDestination.EDITOR -> RealVideoPreviewScreen(project = activeProject, onSaveProject = { viewModel.saveProject(it) })
