@@ -14,6 +14,7 @@ enum class NavDestination(
 ) {
     LANDING("landing", "Home", Icons.Outlined.Home, Icons.Filled.Home, showInBottomBar = true),
     DASHBOARD("dashboard", "Dashboard", Icons.Outlined.Dashboard, Icons.Filled.Dashboard, showInBottomBar = true),
+    GEMINI("gemini", "Gemini", Icons.Outlined.AutoAwesome, Icons.Filled.AutoAwesome, showInBottomBar = true),
     CREATE("create", "Create", Icons.Outlined.AutoAwesome, Icons.Filled.AutoAwesome, showInBottomBar = true),
     PROJECTS("projects", "Projects", Icons.Outlined.Folder, Icons.Filled.Folder, showInBottomBar = true),
     CHARACTERS("characters", "Characters", Icons.Outlined.Face, Icons.Filled.Face, showInBottomBar = false),
