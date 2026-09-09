@@ -48,7 +48,6 @@ function runFfmpeg(args) {
 }
 
 function atempoChain(speed) {
-  // FFmpeg's atempo filter accepts factors from 0.5 to 2.0 per instance.
   const filters = [];
   let value = speed;
   while (value < 0.5) { filters.push('atempo=0.5'); value /= 0.5; }
@@ -57,9 +56,7 @@ function atempoChain(speed) {
   return filters;
 }
 
-async function cleanup(files) {
-  await Promise.all(files.map(f => fs.rm(f, { force: true }).catch(() => {})));
-}
+async function cleanup(files) { await Promise.all(files.map(f => fs.rm(f, { force: true }).catch(() => {}))); }
 
 async function publish(filePath, userId, operation) {
   if (!bucket) throw new Error('Firebase Storage is not configured. Set FIREBASE_STORAGE_BUCKET on the backend.');
@@ -71,7 +68,33 @@ async function publish(filePath, userId, operation) {
   return { objectName, url, id };
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, service: 'DIVSTUDIO AI editing backend', version: '1.1.0' }));
+const AI_MODEL_BY_TASK = { chat: 'gpt-5.6-luna', script: 'gpt-5.6-luna', storyboard: 'gpt-5.6-luna', image_prompt: 'gpt-5.6-luna', video_prompt: 'gpt-5.6-luna', code_debug: 'gpt-5.6-sol' };
+
+async function callOpenAI({ model, prompt }) {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) throw new Error('OPENAI_API_KEY is not configured on the backend.');
+  const response = await fetch('https://api.openai.com/v1/responses', { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model, input: prompt, store: false }) });
+  const raw = await response.text();
+  let data;
+  try { data = JSON.parse(raw); } catch { data = { raw }; }
+  if (!response.ok) throw new Error(data?.error?.message || 'OpenAI request failed.');
+  return { text: data?.output_text || '', responseId: data?.id, model };
+}
+
+app.get('/health', (_req, res) => res.json({ ok: true, service: 'DIVSTUDIO AI editing + AI gateway', version: '2.0.0' }));
+
+app.post('/v1/ai/generate', requireAuth, async (req, res) => {
+  try {
+    const taskType = String(req.body.task_type || 'chat');
+    const prompt = String(req.body.prompt || '').trim();
+    if (!prompt) return res.status(400).json({ error: 'prompt is required' });
+    const requestedModel = typeof req.body.model === 'string' && req.body.model ? req.body.model : null;
+    const model = requestedModel || process.env.OPENAI_TEXT_MODEL || AI_MODEL_BY_TASK[taskType] || 'gpt-5.6-luna';
+    const result = await callOpenAI({ model, prompt });
+    await db.collection('aiJobs').doc(result.responseId || crypto.randomUUID()).set({ uid: req.user.uid, taskType, provider: 'openai', model: result.model, status: 'completed', prompt, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+    res.json({ ok: true, provider: 'openai', model: result.model, text: result.text, response_id: result.responseId });
+  } catch (e) { res.status(500).json({ error: e.message || 'AI generation failed.' }); }
+});
 
 app.post('/v1/edit/transform', requireAuth, upload.single('video'), async (req, res) => {
   const input = req.file?.path;
@@ -92,21 +115,17 @@ app.post('/v1/edit/transform', requireAuth, upload.single('video'), async (req, 
     if (req.body.flip === 'horizontal') vf.push('hflip');
     if (req.body.flip === 'vertical') vf.push('vflip');
     const af = [...atempoChain(speed), `volume=${mute ? 0 : volume}`];
-
     const args = ['-y', '-i', input];
     if (start > 0) args.push('-ss', String(start));
-    // Use an explicit duration so the selected end point is relative to the trim start.
     if (duration > 0) args.push('-t', String(duration));
     if (vf.length) args.push('-vf', vf.join(','));
-    args.push('-af', af.join(','), '-map', '0:v:0', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-c:a', 'aac', '-movflags', '+faststart', output];
-
+    args.push('-af', af.join(','), '-map', '0:v:0', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-c:a', 'aac', '-movflags', '+faststart', output);
     await runFfmpeg(args);
     const published = await publish(output, req.user.uid, 'transform');
     await db.collection('editJobs').doc(published.id).set({ uid: req.user.uid, operation: 'transform', status: 'completed', createdAt: admin.firestore.FieldValue.serverTimestamp(), outputPath: published.objectName, start, end, duration, speed, volume, mute, rotate: req.body.rotate || null, flip: req.body.flip || null });
     res.json({ ok: true, ...published });
-  } catch (e) {
-    res.status(500).json({ error: e.message || 'Video transform failed.' });
-  } finally { await cleanup(files); }
+  } catch (e) { res.status(500).json({ error: e.message || 'Video transform failed.' }); }
+  finally { await cleanup(files); }
 });
 
 app.post('/v1/edit/merge', requireAuth, upload.array('videos', 10), async (req, res) => {
