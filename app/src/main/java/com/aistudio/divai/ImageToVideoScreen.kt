@@ -39,7 +39,7 @@ import java.io.File
 fun ImageToVideoScreen(onBack: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val repository = remember(context) { ImageToVideoRepository(context) }
+    val repository = remember(context) { BackendImageToVideoRepository(context) }
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     var imageFile by remember { mutableStateOf<File?>(null) }
     var prompt by remember { mutableStateOf("Animate this cartoon character naturally: walk forward, wave, smile, and gently move the camera closer. Keep the character's appearance consistent.") }
@@ -63,9 +63,8 @@ fun ImageToVideoScreen(onBack: () -> Unit = {}) {
         }
         val file = File(context.cacheDir, "divstudio_input_${System.currentTimeMillis()}.$extension")
         runCatching {
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                file.outputStream().use { input.copyTo(it) }
-            } ?: error("Could not open the selected image.")
+            context.contentResolver.openInputStream(uri)?.use { input -> file.outputStream().use { input.copyTo(it) } }
+                ?: error("Could not open the selected image.")
             imageFile = file
         }.onFailure {
             imageFile = null
@@ -82,15 +81,15 @@ fun ImageToVideoScreen(onBack: () -> Unit = {}) {
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Image → Cartoon Video")
+            Text("Image → AI Video")
             OutlinedButton(onClick = onBack) { Text("Back") }
         }
         OutlinedButton(onClick = { picker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) {
-            Text(if (imageUri == null) "Choose cartoon image" else "Choose another image")
+            Text(if (imageUri == null) "Choose image" else "Choose another image")
         }
         imageUri?.let { uri ->
             Card(modifier = Modifier.fillMaxWidth()) {
-                AsyncImage(model = uri, contentDescription = "Selected cartoon", modifier = Modifier.fillMaxWidth().height(240.dp))
+                AsyncImage(model = uri, contentDescription = "Selected image", modifier = Modifier.fillMaxWidth().height(240.dp))
             }
         }
         Text("Motion: $motion")
