@@ -8,13 +8,16 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import admin from 'firebase-admin';
-import { Storage } from '@google-cloud/storage';
+import { createClient } from '@supabase/supabase-js';
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
-const storage = new Storage();
-const bucketName = process.env.FIREBASE_STORAGE_BUCKET || process.env.GCLOUD_STORAGE_BUCKET;
-const bucket = bucketName ? storage.bucket(bucketName) : null;
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = supabaseUrl && supabaseServiceRoleKey
+  ? createClient(supabaseUrl, supabaseServiceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } })
+  : null;
+const supabaseBucket = process.env.SUPABASE_STORAGE_BUCKET || 'divstudio-videos';
 const app = express();
 app.use(cors({ origin: process.env.ALLOWED_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean) || '*' }));
 app.use(express.json({ limit: '8mb' }));
@@ -31,7 +34,17 @@ async function requireAuth(req, res, next) {
 function runFfmpeg(args) { return new Promise((resolve, reject) => { const child = spawn(ffmpegPath, ['-hide_banner', '-loglevel', 'error', ...args]); let stderr = ''; child.stderr.on('data', d => { stderr += d.toString(); if (stderr.length > 8000) stderr = stderr.slice(-8000); }); child.on('error', reject); child.on('close', code => code === 0 ? resolve() : reject(new Error(stderr || `FFmpeg exited with ${code}`))); }); }
 function atempoChain(speed) { const filters = []; let value = speed; while (value < 0.5) { filters.push('atempo=0.5'); value /= 0.5; } while (value > 2) { filters.push('atempo=2'); value /= 2; } if (Math.abs(value - 1) > 0.0001) filters.push(`atempo=${value}`); return filters; }
 async function cleanup(files) { await Promise.all(files.map(f => fs.rm(f, { force: true }).catch(() => {}))); }
-async function publish(filePath, userId, operation) { if (!bucket) throw new Error('Firebase Storage is not configured. Set FIREBASE_STORAGE_BUCKET on the backend.'); const id = crypto.randomUUID(); const objectName = `users/${userId}/edits/${operation}/${id}.mp4`; const target = bucket.file(objectName); await bucket.upload(filePath, { destination: objectName, metadata: { contentType: 'video/mp4', metadata: { ownerUid: userId, operation } } }); const [url] = await target.getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 60 * 60 * 1000 }); return { objectName, url, id }; }
+async function publish(filePath, userId, operation) {
+  if (!supabase) throw new Error('Supabase Storage is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on the backend.');
+  const id = crypto.randomUUID();
+  const objectName = `users/${userId}/edits/${operation}/${id}.mp4`;
+  const fileBuffer = await fs.readFile(filePath);
+  const { error: uploadError } = await supabase.storage.from(supabaseBucket).upload(objectName, fileBuffer, { contentType: 'video/mp4', upsert: false });
+  if (uploadError) throw new Error(`Supabase Storage upload failed: ${uploadError.message}`);
+  const { data, error: signedUrlError } = await supabase.storage.from(supabaseBucket).createSignedUrl(objectName, 60 * 60);
+  if (signedUrlError || !data?.signedUrl) throw new Error(`Supabase signed URL failed: ${signedUrlError?.message || 'No URL returned.'}`);
+  return { objectName, url: data.signedUrl, id };
+}
 
 const AI_MODEL_BY_TASK = { chat: 'gpt-5.6-luna', script: 'gpt-5.6-luna', storyboard: 'gpt-5.6-luna', image_prompt: 'gpt-5.6-luna', video_prompt: 'gpt-5.6-luna', code_debug: 'gpt-5.6-sol' };
 async function callOpenAI({ model, prompt }) { const key = process.env.OPENAI_API_KEY; if (!key) throw new Error('OPENAI_API_KEY is not configured on the backend.'); const response = await fetch('https://api.openai.com/v1/responses', { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model, input: prompt, store: false }) }); const raw = await response.text(); let data; try { data = JSON.parse(raw); } catch { data = { raw }; } if (!response.ok) throw new Error(data?.error?.message || 'OpenAI request failed.'); return { text: data?.output_text || '', responseId: data?.id, model }; }
@@ -63,7 +76,7 @@ async function createRunwayVideo({ prompt, imageUrl, model, ratio, duration }) {
   return { provider: 'runway', model: selectedModel, taskId: data?.id };
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, service: 'DIVSTUDIO AI editing + AI gateway', version: '2.3.0', video_router: Boolean(process.env.RUNWAY_ROUTER_CONFIG_ID) }));
+app.get('/health', (_req, res) => res.json({ ok: true, service: 'DIVSTUDIO AI editing + AI gateway', version: '2.4.0', video_router: Boolean(process.env.RUNWAY_ROUTER_CONFIG_ID), storage: supabase ? 'supabase' : 'not-configured', storage_bucket: supabase ? supabaseBucket : null }));
 
 app.post('/v1/ai/generate', requireAuth, async (req, res) => { try { const taskType = String(req.body.task_type || 'chat'); const prompt = String(req.body.prompt || '').trim(); if (!prompt) return res.status(400).json({ error: 'prompt is required' }); const model = (typeof req.body.model === 'string' && req.body.model) || process.env.OPENAI_TEXT_MODEL || AI_MODEL_BY_TASK[taskType] || 'gpt-5.6-luna'; const result = await callOpenAI({ model, prompt }); await db.collection('aiJobs').doc(result.responseId || crypto.randomUUID()).set({ uid: req.user.uid, taskType, provider: 'openai', model: result.model, status: 'completed', prompt, createdAt: admin.firestore.FieldValue.serverTimestamp() }); res.json({ ok: true, provider: 'openai', model: result.model, text: result.text, response_id: result.responseId }); } catch (e) { res.status(500).json({ error: e.message || 'AI generation failed.' }); } });
 
