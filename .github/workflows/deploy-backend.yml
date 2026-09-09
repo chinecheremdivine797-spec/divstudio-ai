@@ -30,7 +30,7 @@ jobs:
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-      - name: Deploy FFmpeg + AI video backend to Cloud Run
+      - name: Deploy complete DIVSTUDIO AI backend
         run: |
           gcloud run deploy divstudio-ai-editor \
             --source backend \
@@ -40,13 +40,16 @@ jobs:
             --set-env-vars "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
             --set-env-vars "SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             --set-env-vars "SUPABASE_STORAGE_BUCKET=${{ secrets.SUPABASE_STORAGE_BUCKET || 'divstudio-videos' }}" \
+            --set-env-vars "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" \
+            --set-env-vars "GOOGLE_VIDEO_MODEL=${{ secrets.GOOGLE_VIDEO_MODEL || 'veo-3.1-generate-preview' }}" \
+            --set-env-vars "GOOGLE_VIDEO_RESOLUTION=${{ secrets.GOOGLE_VIDEO_RESOLUTION || '720p' }}" \
             --set-env-vars "RUNWAY_VIDEO_MODEL=${{ secrets.RUNWAY_VIDEO_MODEL || 'gen4.5' }}" \
             --set-env-vars "RUNWAY_ROUTER_CONFIG_ID=${{ secrets.RUNWAY_ROUTER_CONFIG_ID }}" \
             --set-env-vars "RUNWAYML_API_SECRET=${{ secrets.RUNWAYML_API_SECRET }}" \
             --set-env-vars "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" \
             --quiet
 
-      - name: Verify backend health
+      - name: Verify complete backend health
         run: |
           URL=$(gcloud run services describe divstudio-ai-editor \
             --region "${{ secrets.GCP_REGION }}" \
