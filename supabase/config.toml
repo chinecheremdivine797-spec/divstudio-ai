@@ -1,0 +1,4 @@
+project_id = "iyoxcubcxgywybkufjab"
+
+[functions.divstudio-ai-router]
+verify_jwt = true
