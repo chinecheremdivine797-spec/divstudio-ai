@@ -46,12 +46,24 @@ async function runwayRequest(pathname, method = 'GET', body) {
 }
 
 async function createRunwayVideo({ prompt, imageUrl, model, ratio, duration }) {
-  const payload = { model: model || process.env.RUNWAY_VIDEO_MODEL || 'seedance2_5', promptText: prompt, ratio: ratio === '9:16' ? '480:854' : '854:480', duration: Math.min(30, Math.max(4, Number(duration || 5))) };
+  const seconds = Math.min(30, Math.max(4, Number(duration || 5)));
+  const aspectRatio = ratio === '9:16' ? '9:16' : '16:9';
+  const routerConfig = process.env.RUNWAY_ROUTER_CONFIG_ID;
+  if (routerConfig) {
+    const input = { promptText: prompt, aspectRatio, duration: seconds };
+    if (imageUrl) input.referenceImages = [{ uri: imageUrl, role: 'first' }];
+    const data = await runwayRequest('/v1/generate/video', 'POST', { configId: routerConfig, input });
+    return { provider: 'runway-router', model: data?.routing?.model || 'router-selected', taskId: data?.id, routing: data?.routing };
+  }
+  const selectedModel = model || process.env.RUNWAY_VIDEO_MODEL || 'gen4.5';
+  const directRatio = aspectRatio === '9:16' ? '720:1280' : '1280:720';
+  const payload = { model: selectedModel, promptText: prompt, ratio: directRatio, duration: seconds };
   if (imageUrl) payload.promptImage = imageUrl;
-  return runwayRequest('/v1/image_to_video', 'POST', payload).then(data => ({ provider: 'runway', model: payload.model, taskId: data?.id }));
+  const data = await runwayRequest('/v1/image_to_video', 'POST', payload);
+  return { provider: 'runway', model: selectedModel, taskId: data?.id };
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, service: 'DIVSTUDIO AI editing + AI gateway', version: '2.2.0', video_router: true }));
+app.get('/health', (_req, res) => res.json({ ok: true, service: 'DIVSTUDIO AI editing + AI gateway', version: '2.3.0', video_router: Boolean(process.env.RUNWAY_ROUTER_CONFIG_ID) }));
 
 app.post('/v1/ai/generate', requireAuth, async (req, res) => { try { const taskType = String(req.body.task_type || 'chat'); const prompt = String(req.body.prompt || '').trim(); if (!prompt) return res.status(400).json({ error: 'prompt is required' }); const model = (typeof req.body.model === 'string' && req.body.model) || process.env.OPENAI_TEXT_MODEL || AI_MODEL_BY_TASK[taskType] || 'gpt-5.6-luna'; const result = await callOpenAI({ model, prompt }); await db.collection('aiJobs').doc(result.responseId || crypto.randomUUID()).set({ uid: req.user.uid, taskType, provider: 'openai', model: result.model, status: 'completed', prompt, createdAt: admin.firestore.FieldValue.serverTimestamp() }); res.json({ ok: true, provider: 'openai', model: result.model, text: result.text, response_id: result.responseId }); } catch (e) { res.status(500).json({ error: e.message || 'AI generation failed.' }); } });
 
@@ -59,12 +71,12 @@ app.post('/v1/video/generate', requireAuth, async (req, res) => {
   try {
     const prompt = String(req.body.prompt || '').trim(); if (!prompt) return res.status(400).json({ error: 'prompt is required' });
     const provider = String(req.body.provider || 'runway').toLowerCase();
-    if (provider !== 'runway') return res.status(503).json({ error: `Provider '${provider}' is registered but its adapter is not enabled yet.` });
+    if (!['runway', 'runway-router'].includes(provider)) return res.status(503).json({ error: `Provider '${provider}' is registered but its adapter is not enabled yet.` });
     const imageUrl = typeof req.body.image_url === 'string' && req.body.image_url ? req.body.image_url : null;
     const result = await createRunwayVideo({ prompt, imageUrl, model: req.body.model, ratio: req.body.aspect_ratio || req.body.ratio || '16:9', duration: req.body.duration || 5 });
     if (!result.taskId) throw new Error('Runway returned no task ID.');
-    await db.collection('videoJobs').doc(result.taskId).set({ uid: req.user.uid, provider: result.provider, model: result.model, prompt, status: 'PENDING', createdAt: admin.firestore.FieldValue.serverTimestamp() });
-    res.status(202).json({ ok: true, provider: result.provider, model: result.model, task_id: result.taskId, status: 'PENDING' });
+    await db.collection('videoJobs').doc(result.taskId).set({ uid: req.user.uid, provider: result.provider, model: result.model, prompt, status: 'PENDING', routing: result.routing || null, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+    res.status(202).json({ ok: true, provider: result.provider, model: result.model, task_id: result.taskId, status: 'PENDING', routing: result.routing || null });
   } catch (e) { res.status(502).json({ error: e.message || 'Video generation submission failed.' }); }
 });
 
@@ -72,7 +84,7 @@ app.get('/v1/video/status/:provider/:taskId', requireAuth, async (req, res) => {
   const provider = String(req.params.provider || '').toLowerCase(); const taskId = String(req.params.taskId || ''); if (!taskId) return res.status(400).json({ error: 'taskId is required' });
   try {
     const jobRef = db.collection('videoJobs').doc(taskId); const jobSnap = await jobRef.get(); if (!jobSnap.exists || jobSnap.data()?.uid !== req.user.uid) return res.status(404).json({ error: 'Video job not found.' }); const job = jobSnap.data();
-    if (provider !== 'runway') return res.status(503).json({ error: `Provider '${provider}' status adapter is not enabled yet.` });
+    if (!['runway', 'runway-router'].includes(provider)) return res.status(503).json({ error: `Provider '${provider}' status adapter is not enabled yet.` });
     const task = await runwayRequest(`/v1/tasks/${encodeURIComponent(taskId)}`); const status = String(task.status || 'PENDING');
     if (status === 'SUCCEEDED' && Array.isArray(task.output) && task.output[0]) {
       if (job.outputUrl) return res.json({ ok: true, provider, model: job.model, status, video_url: job.outputUrl, completed: true });
