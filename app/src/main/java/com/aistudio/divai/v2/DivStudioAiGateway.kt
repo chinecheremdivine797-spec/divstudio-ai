@@ -1,6 +1,6 @@
 package com.aistudio.divai.v2
 
-import com.aistudio.divai.BuildConfig
+import com.example.BuildConfig
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.MediaType.Companion.toMediaType
@@ -11,9 +11,7 @@ import org.json.JSONObject
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-/** Secure Android client for the DIVSTUDIO AI backend.
- * Provider API keys never live in the APK; the backend owns them.
- */
+/** Secure Android client for the DIVSTUDIO AI backend. Provider API keys never live in the APK. */
 class DivStudioAiGateway(
     private val auth: FirebaseAuth = FirebaseAuth.getInstance(),
     private val http: OkHttpClient = OkHttpClient()
@@ -29,7 +27,6 @@ class DivStudioAiGateway(
         require(prompt.isNotBlank()) { "prompt cannot be blank" }
         val base = BuildConfig.DIVSTUDIO_BACKEND_URL.trimEnd('/')
         require(base.isNotBlank()) { "DIVSTUDIO_BACKEND_URL is not configured" }
-
         val token = auth.currentUser?.idToken()
             ?: throw IllegalStateException("Sign in to DIVSTUDIO AI before generating content")
 
