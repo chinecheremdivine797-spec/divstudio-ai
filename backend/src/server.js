@@ -18,7 +18,7 @@ const bucket = bucketName ? storage.bucket(bucketName) : null;
 
 const app = express();
 app.use(cors({ origin: process.env.ALLOWED_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean) || '*' }));
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '8mb' }));
 
 const upload = multer({
   dest: path.join(os.tmpdir(), 'divstudio-upload'),
@@ -81,7 +81,42 @@ async function callOpenAI({ model, prompt }) {
   return { text: data?.output_text || '', responseId: data?.id, model };
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, service: 'DIVSTUDIO AI editing + AI gateway', version: '2.0.0' }));
+async function createRunwayVideo({ prompt, imageUrl, model, ratio, duration }) {
+  const key = process.env.RUNWAYML_API_SECRET;
+  if (!key) throw new Error('RUNWAYML_API_SECRET is not configured on the backend.');
+  const payload = {
+    model: model || process.env.RUNWAY_VIDEO_MODEL || 'gen4.5',
+    promptText: prompt,
+    ratio: ratio === '9:16' ? '768:1280' : '1280:768',
+    duration: Math.min(10, Math.max(2, Number(duration || 5)))
+  };
+  if (imageUrl) payload.promptImage = imageUrl;
+  const response = await fetch('https://api.dev.runwayml.com/v1/image_to_video', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Runway-Version': '2024-11-06' },
+    body: JSON.stringify(payload)
+  });
+  const raw = await response.text();
+  let data;
+  try { data = JSON.parse(raw); } catch { data = { raw }; }
+  if (!response.ok) throw new Error(data?.error?.message || data?.message || `Runway request failed (${response.status}).`);
+  return { provider: 'runway', model: payload.model, taskId: data?.id };
+}
+
+async function getRunwayTask(taskId) {
+  const key = process.env.RUNWAYML_API_SECRET;
+  if (!key) throw new Error('RUNWAYML_API_SECRET is not configured on the backend.');
+  const response = await fetch(`https://api.dev.runwayml.com/v1/tasks/${encodeURIComponent(taskId)}`, {
+    headers: { Authorization: `Bearer ${key}`, 'X-Runway-Version': '2024-11-06' }
+  });
+  const raw = await response.text();
+  let data;
+  try { data = JSON.parse(raw); } catch { data = { raw }; }
+  if (!response.ok) throw new Error(data?.error?.message || data?.message || `Runway task lookup failed (${response.status}).`);
+  return data;
+}
+
+app.get('/health', (_req, res) => res.json({ ok: true, service: 'DIVSTUDIO AI editing + AI gateway', version: '2.1.0' }));
 
 app.post('/v1/ai/generate', requireAuth, async (req, res) => {
   try {
@@ -94,6 +129,82 @@ app.post('/v1/ai/generate', requireAuth, async (req, res) => {
     await db.collection('aiJobs').doc(result.responseId || crypto.randomUUID()).set({ uid: req.user.uid, taskType, provider: 'openai', model: result.model, status: 'completed', prompt, createdAt: admin.firestore.FieldValue.serverTimestamp() });
     res.json({ ok: true, provider: 'openai', model: result.model, text: result.text, response_id: result.responseId });
   } catch (e) { res.status(500).json({ error: e.message || 'AI generation failed.' }); }
+});
+
+// Authenticated multi-model video submission. Provider keys stay on the server.
+app.post('/v1/video/generate', requireAuth, async (req, res) => {
+  try {
+    const prompt = String(req.body.prompt || '').trim();
+    if (!prompt) return res.status(400).json({ error: 'prompt is required' });
+    const provider = String(req.body.provider || 'runway').toLowerCase();
+    const imageUrl = typeof req.body.image_url === 'string' && req.body.image_url ? req.body.image_url : null;
+    if (imageUrl && imageUrl.startsWith('data:') && imageUrl.length > 5 * 1024 * 1024) {
+      return res.status(413).json({ error: 'Image data URI is larger than Runway’s 5MB encoded input limit.' });
+    }
+    if (provider !== 'runway') return res.status(503).json({ error: `Provider '${provider}' is registered for the studio but its server adapter is not enabled yet.` });
+
+    const result = await createRunwayVideo({
+      prompt,
+      imageUrl,
+      model: req.body.model,
+      ratio: req.body.aspect_ratio || req.body.ratio || '16:9',
+      duration: req.body.duration || 5
+    });
+
+    await db.collection('videoJobs').doc(result.taskId).set({
+      uid: req.user.uid,
+      provider: result.provider,
+      model: result.model,
+      prompt,
+      status: 'PENDING',
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    res.status(202).json({ ok: true, provider: result.provider, model: result.model, task_id: result.taskId, status: 'PENDING' });
+  } catch (e) {
+    res.status(502).json({ error: e.message || 'Video generation submission failed.' });
+  }
+});
+
+// Poll a provider task and, once complete, copy the ephemeral provider output into DIVSTUDIO storage.
+app.get('/v1/video/status/:provider/:taskId', requireAuth, async (req, res) => {
+  const provider = String(req.params.provider || '').toLowerCase();
+  const taskId = String(req.params.taskId || '');
+  if (!taskId) return res.status(400).json({ error: 'taskId is required' });
+  try {
+    const jobRef = db.collection('videoJobs').doc(taskId);
+    const jobSnap = await jobRef.get();
+    if (!jobSnap.exists || jobSnap.data()?.uid !== req.user.uid) return res.status(404).json({ error: 'Video job not found.' });
+    const job = jobSnap.data();
+
+    if (provider !== 'runway') return res.status(503).json({ error: `Provider '${provider}' status adapter is not enabled yet.` });
+    const task = await getRunwayTask(taskId);
+    const status = String(task.status || 'PENDING');
+
+    if (status === 'SUCCEEDED' && Array.isArray(task.output) && task.output[0]) {
+      if (job.outputUrl) return res.json({ ok: true, provider, model: job.model, status, video_url: job.outputUrl, completed: true });
+      const temp = path.join(os.tmpdir(), `divstudio-${crypto.randomUUID()}.mp4`);
+      try {
+        const download = await fetch(task.output[0]);
+        if (!download.ok) throw new Error(`Provider output download failed (${download.status}).`);
+        await fs.writeFile(temp, Buffer.from(await download.arrayBuffer()));
+        const published = await publish(temp, req.user.uid, 'ai-generation');
+        await jobRef.update({ status, outputUrl: published.url, outputPath: published.objectName, completedAt: admin.firestore.FieldValue.serverTimestamp() });
+        return res.json({ ok: true, provider, model: job.model, status, video_url: published.url, completed: true });
+      } finally {
+        await cleanup([temp]);
+      }
+    }
+
+    if (status === 'FAILED' || status === 'CANCELED') {
+      await jobRef.update({ status, error: task.failure || task.error || 'Provider task failed.', completedAt: admin.firestore.FieldValue.serverTimestamp() });
+      return res.json({ ok: false, provider, model: job.model, status, error: task.failure || task.error || 'Provider task failed.', completed: true });
+    }
+
+    return res.json({ ok: true, provider, model: job.model, status, completed: false });
+  } catch (e) {
+    res.status(502).json({ error: e.message || 'Video status lookup failed.' });
+  }
 });
 
 app.post('/v1/edit/transform', requireAuth, upload.single('video'), async (req, res) => {
