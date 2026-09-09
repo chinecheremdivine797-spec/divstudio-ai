@@ -1,6 +1,6 @@
 package com.aistudio.divai.v2
 
-/** Version 2 feature switches. No payment or Supabase features are included. */
+/** DIVSTUDIO AI v2 feature switches. Secrets remain server-side. */
 data class StudioV2Config(
     val multiModelHub: Boolean = true,
     val cartoonMode: Boolean = true,
@@ -12,7 +12,9 @@ data class StudioV2Config(
     val sceneContinuity: Boolean = true,
     val storyboardPipeline: Boolean = true,
     val realMp4Export: Boolean = true,
-    val firebaseBackend: Boolean = true,
+    val firebaseBackend: Boolean = false,
     val paymentsEnabled: Boolean = false,
-    val supabaseEnabled: Boolean = false
+    val supabaseEnabled: Boolean = true,
+    val providerFallback: Boolean = true,
+    val serverSideProviderKeys: Boolean = true
 )
