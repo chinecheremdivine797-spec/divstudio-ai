@@ -37,10 +37,13 @@ jobs:
             --region "${{ secrets.GCP_REGION }}" \
             --platform managed \
             --allow-unauthenticated \
-            --set-env-vars "FIREBASE_STORAGE_BUCKET=${{ secrets.FIREBASE_STORAGE_BUCKET }}" \
+            --set-env-vars "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
+            --set-env-vars "SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            --set-env-vars "SUPABASE_STORAGE_BUCKET=${{ secrets.SUPABASE_STORAGE_BUCKET || 'divstudio-videos' }}" \
             --set-env-vars "RUNWAY_VIDEO_MODEL=${{ secrets.RUNWAY_VIDEO_MODEL || 'gen4.5' }}" \
             --set-env-vars "RUNWAY_ROUTER_CONFIG_ID=${{ secrets.RUNWAY_ROUTER_CONFIG_ID }}" \
             --set-env-vars "RUNWAYML_API_SECRET=${{ secrets.RUNWAYML_API_SECRET }}" \
+            --set-env-vars "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" \
             --quiet
 
       - name: Verify backend health
