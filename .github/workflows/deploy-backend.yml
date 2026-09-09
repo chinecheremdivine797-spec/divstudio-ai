@@ -39,6 +39,7 @@ jobs:
             --allow-unauthenticated \
             --set-env-vars "FIREBASE_STORAGE_BUCKET=${{ secrets.FIREBASE_STORAGE_BUCKET }}" \
             --set-env-vars "RUNWAY_VIDEO_MODEL=${{ secrets.RUNWAY_VIDEO_MODEL || 'gen4.5' }}" \
+            --set-env-vars "RUNWAY_ROUTER_CONFIG_ID=${{ secrets.RUNWAY_ROUTER_CONFIG_ID }}" \
             --set-env-vars "RUNWAYML_API_SECRET=${{ secrets.RUNWAYML_API_SECRET }}" \
             --quiet
 
