@@ -12,6 +12,9 @@ permissions:
   contents: read
   id-token: write
 
+env:
+  SERVICE_NAME: divstudio-ai-editor
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -24,15 +27,20 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+          export_environment_variables: true
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          version: latest
+
+      - name: Configure project
+        run: gcloud config set project "${{ secrets.GCP_PROJECT_ID }}"
 
       - name: Deploy complete DIVSTUDIO AI backend
         run: |
-          gcloud run deploy divstudio-ai-editor \
+          gcloud run deploy "$SERVICE_NAME" \
             --source backend \
             --region "${{ secrets.GCP_REGION }}" \
             --platform managed \
@@ -51,8 +59,8 @@ jobs:
 
       - name: Verify complete backend health
         run: |
-          URL=$(gcloud run services describe divstudio-ai-editor \
+          URL=$(gcloud run services describe "$SERVICE_NAME" \
             --region "${{ secrets.GCP_REGION }}" \
             --format='value(status.url)')
           echo "DIVSTUDIO_BACKEND_URL=$URL"
-          curl --fail --silent --show-error "$URL/health"
+          curl --fail --silent --show-error --retry 5 --retry-delay 5 "$URL/health"
