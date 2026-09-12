@@ -25,10 +25,10 @@ fun RealVideoPreviewScreen(project: ProjectEntity?, onSaveProject: (ProjectEntit
         Text(project?.name ?: "DIV EDIT AI Editor", color = TextPrimary, fontSize = 21.sp)
         Text("Import → Edit → Export", color = NeonCyan, fontSize = 12.sp)
         Spacer(Modifier.height(16.dp))
-        OutlinedButton(onClick = { picker.launch(arrayOf("video/mp4", "video/*")) }, Modifier.fillMaxWidth()) { Icon(Icons.Filled.VideoLibrary, null); Spacer(Modifier.width(8.dp)); Text(if (sourceUri == null) "Import video" else "Video selected") }
+        OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { picker.launch(arrayOf("video/mp4", "video/*")) }) { Icon(Icons.Filled.VideoLibrary, null); Spacer(Modifier.width(8.dp)); Text(if (sourceUri == null) "Import video" else "Video selected") }
         Spacer(Modifier.height(16.dp))
-        Surface(Modifier.fillMaxWidth().height(220.dp), color = Color.Black) { Text(if (sourceUri == null) "Import an MP4 to begin editing." else "Video ready for the FFmpeg editor.", color = TextSecondary, modifier = Modifier.padding(16.dp)) }
+        Surface(modifier = Modifier.fillMaxWidth().height(220.dp), color = Color.Black) { Text(if (sourceUri == null) "Import an MP4 to begin editing." else "Video ready for the FFmpeg editor.", color = TextSecondary, modifier = Modifier.padding(16.dp)) }
         Spacer(Modifier.height(16.dp))
-        Button(onClick = { if (sourceUri != null) project?.let { onSaveProject(it.copy(status = "queued", currentStep = "Ready for FFmpeg export")) } }, enabled = sourceUri != null, Modifier.fillMaxWidth()) { Icon(Icons.Filled.Movie, null); Spacer(Modifier.width(8.dp)); Text("Export edited MP4") }
+        Button(modifier = Modifier.fillMaxWidth(), onClick = { if (sourceUri != null) project?.let { onSaveProject(it.copy(status = "queued", currentStep = "Ready for FFmpeg export")) } }, enabled = sourceUri != null) { Icon(Icons.Filled.Movie, null); Spacer(Modifier.width(8.dp)); Text("Export edited MP4") }
     }
 }
